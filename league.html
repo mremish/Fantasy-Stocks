@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>League</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/portal.css' %}">
+    <style>
+        .league-container {
+            padding: 20px;
+        }
+        .members-list {
+            margin-top: 20px;
+        }
+        .members-list ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        .members-list li {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .start-league-button,
+        .end-draft-button {
+            margin-top: 20px;
+            display: inline-block;
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+        .start-league-button:hover,
+        .end-draft-button:hover {
+            background-color: #45a049;
+        }
+        .enter-draft-button {
+            margin-top: 20px;
+            display: inline-block;
+            background-color: #008CBA;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+        .enter-draft-button:hover {
+            background-color: #007B9A;
+        }
+    </style>
+</head>
+<body>
+    <div class="portal-container">
+        <nav class="sidebar">
+            <ul>
+                <li><a href="{% url 'user_portal' %}">Dashboard</a></li>
+                <li><a href="{% url 'portfolio_management' %}">Portfolio Management</a></li>
+                <li><a href="{% url 'league' %}">Leagues</a></li>
+                <li><a href="{% url 'matchups' %}">Matchups</a></li>
+                <li><a href="#">Rules</a></li>
+            </ul>
+        </nav>
+        <div class="main-content">
+            <header>
+                <div class="header-content">
+                    <h1>League</h1>
+                    <a href="{% url 'logout' %}" class="logout-button">Log Out</a>
+                </div>
+            </header>
+            <section class="league-container">
+                {% if league %}
+                    <h2>{{ league.name }}</h2>
+                    <p>{{ league.description }}</p>
+                    {% if is_owner %}
+                        <div class="members-list">
+                            <h3>Members:</h3>
+                            <ul>
+                                {% for member in members %}
+                                    <li>{{ member.user.username }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        <form method="post">
+                            {% csrf_token %}
+                            {% if not league.started %}
+                                <button type="submit" name="start_league" class="start-league-button">Start League</button>
+                            {% endif %}
+                        </form>
+                    {% endif %}
+                    {% if league.started and not league.draftDone %}
+                        <a href="{% url 'draft' league.name %}" class="enter-draft-button" id="enter-draft-button">Enter Draft</a>
+                    {% elif not league.started %}
+                        <p id="draft-status-message">Waiting for the league to start...</p>
+                    {% endif %}
+                {% else %}
+                    <p>You are not part of any league. Please join or create a league.</p>
+                    <a href="{% url 'create_league' %}" class="btn">Create League</a>
+                    <a href="{% url 'join_league' %}" class="btn">Join League</a>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+    <script>
+        const leagueName = "{{ league.name|escapejs|slugify }}"; // Ensure the league name is sanitized
+        const user = "{{ request.user.username }}";
+        const started = "{{ league.started|yesno:'true,false' }}" === 'true'; // Convert to JS boolean
+        const draftDone = "{{ league.draftDone|yesno:'true,false' }}" === 'true'; // Convert to JS boolean
+
+        const chatSocket = new WebSocket(
+            'ws://' + window.location.host + '/ws/league/' + encodeURIComponent(leagueName) + '/'
+        );
+
+        chatSocket.onmessage = function(e) {
+            const data = JSON.parse(e.data);
+            const message = data.message;
+
+            if (message === 'The league has started! You can now enter the draft.') {
+                const draftStatusMessage = document.getElementById('draft-status-message');
+                if (draftStatusMessage) {
+                    draftStatusMessage.remove();
+                }
+
+                if (!document.getElementById('enter-draft-button')) {
+                    const enterDraftButton = document.createElement('a');
+                    enterDraftButton.href = '#';
+                    enterDraftButton.className = 'enter-draft-button';
+                    enterDraftButton.textContent = 'Enter Draft';
+                    enterDraftButton.id = 'enter-draft-button';
+
+                    document.querySelector('.league-container').appendChild(enterDraftButton);
+                }
+            }
+
+            if (message === 'The draft is done!') {
+                const enterDraftButton = document.getElementById('enter-draft-button');
+                if (enterDraftButton) {
+                    enterDraftButton.remove();
+                }
+            }
+        };
+
+        chatSocket.onclose = function(e) {
+            console.error('Chat socket closed unexpectedly');
+        };
+
+        // Check if the league has already started when the page loads
+        window.onload = function() {
+            if (started && !draftDone) {
+                const draftStatusMessage = document.getElementById('draft-status-message');
+                if (draftStatusMessage) {
+                    draftStatusMessage.remove();
+                }
+
+                if (!document.getElementById('enter-draft-button')) {
+                    const enterDraftButton = document.createElement('a');
+                    enterDraftButton.href = '#';
+                    enterDraftButton.className = 'enter-draft-button';
+                    enterDraftButton.textContent = 'Enter Draft';
+                    enterDraftButton.id = 'enter-draft-button';
+
+                    document.querySelector('.league-container').appendChild(enterDraftButton);
+                }
+            } else if (draftDone) {
+                const enterDraftButton = document.getElementById('enter-draft-button');
+                if (enterDraftButton) {
+                    enterDraftButton.remove();
+                }
+            }
+        };
+    </script>
+</body>
+</html>
